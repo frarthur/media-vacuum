@@ -15,7 +15,7 @@ public class SelfUpdateServiceTests
         const string json = """
         {
           "tag_name": "v0.3.0",
-          "html_url": "https://github.com/frarthur/MediaVacuum/releases/tag/v0.3.0",
+          "html_url": "https://github.com/frarthur/media-vacuum/releases/tag/v0.3.0",
           "assets": [
             { "name": "MediaVacuum-0.3.0-win-x64.zip", "browser_download_url": "https://example.com/update.zip", "digest": "sha256:ABCD" },
             { "name": "MediaVacuum.exe", "browser_download_url": "https://example.com/MediaVacuum.exe" }

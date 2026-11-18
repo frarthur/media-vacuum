@@ -4,8 +4,8 @@
 
 **A modern Windows GUI for [yt-dlp](https://github.com/yt-dlp/yt-dlp)**
 
-[![Windows x64](https://img.shields.io/badge/Download-Windows_x64-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/frarthur/MediaVacuum/releases/latest)
-[![Version](https://img.shields.io/github/v/release/frarthur/MediaVacuum?color=brightgreen&style=for-the-badge&label=Latest)](https://github.com/frarthur/MediaVacuum/releases)
+[![Windows x64](https://img.shields.io/badge/Download-Windows_x64-blue?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/frarthur/media-vacuum/releases/latest)
+[![Version](https://img.shields.io/github/v/release/frarthur/media-vacuum?color=brightgreen&style=for-the-badge&label=Latest)](https://github.com/frarthur/media-vacuum/releases)
 [![.NET 9](https://img.shields.io/badge/.NET-9.0-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
@@ -45,7 +45,7 @@ MediaVacuum wraps [yt-dlp](https://github.com/yt-dlp/yt-dlp) into a clean Window
 
 ## Quick Start
 
-1. Download the latest `MediaVacuum.exe` from [Releases](https://github.com/frarthur/MediaVacuum/releases/latest)
+1. Download the latest `MediaVacuum.exe` from [Releases](https://github.com/frarthur/media-vacuum/releases/latest)
 2. Run it — `yt-dlp.exe` is downloaded automatically on first launch if needed
 3. Paste a URL, click **Add to queue**, review the list, then click **Download**
 
@@ -129,7 +129,7 @@ Translations are embedded in the executable. Advanced users can override individ
 ## Installation from source
 
 ```powershell
-git clone https://github.com/frarthur/MediaVacuum.git
+git clone https://github.com/frarthur/media-vacuum.git
 cd MediaVacuum
 dotnet run --project src/MediaVacuum
 ```

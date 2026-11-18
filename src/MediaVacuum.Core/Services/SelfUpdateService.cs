@@ -19,7 +19,7 @@ namespace MediaVacuum.Core.Services;
 public class SelfUpdateService : IAppUpdateService
 {
     private const string LatestApiUrl =
-        "https://api.github.com/repos/frarthur/MediaVacuum/releases/latest";
+        "https://api.github.com/repos/frarthur/media-vacuum/releases/latest";
 
     private readonly HttpClient _httpClient;
     private readonly string? _updatesDirectory;

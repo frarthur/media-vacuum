@@ -38,6 +38,12 @@ public static class YtDlpArgumentBuilder
             args.Add(ffmpegPath);
         }
 
+        if (!string.IsNullOrWhiteSpace(options.JsRuntime))
+        {
+            args.Add("--js-runtimes");
+            args.Add(options.JsRuntime);
+        }
+
         if (options.OverwriteExisting)
         {
             args.Add("--force-overwrites");

@@ -17,6 +17,10 @@ public static class AppPaths
 
     public static string FfprobePath => Path.Combine(FfmpegDir, "ffprobe.exe");
 
+    public static string JsDir => Path.Combine(DataDir, "js");
+
+    public static string DenoPath => Path.Combine(JsDir, "deno.exe");
+
     public static string ThumbsDir => Path.Combine(DataDir, "thumbnails");
 
     public static string LogsDir => Path.Combine(DataDir, "logs");
@@ -36,6 +40,7 @@ public static class AppPaths
     {
         Directory.CreateDirectory(DataDir);
         Directory.CreateDirectory(ThumbsDir);
+        Directory.CreateDirectory(JsDir);
         Directory.CreateDirectory(LogsDir);
         Directory.CreateDirectory(TempDir);
     }

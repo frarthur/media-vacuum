@@ -6,7 +6,7 @@ Application Windows native qui rend **yt-dlp** confortable : file de télécharg
 
 ---
 
-## État actuel — v0.2.0
+## État actuel — v0.2.1
 
 ### Fondations
 - [x] Solution .NET 9 / WPF / MVVM en 3 projets (UI, Core, Installer)
@@ -32,6 +32,8 @@ Application Windows native qui rend **yt-dlp** confortable : file de télécharg
 
 ### Outils
 - [x] Détection de ffmpeg et téléchargement guidé
+- [x] Détection des runtimes JavaScript (Deno/Node/Bun/QuickJS) et téléchargement de Deno
+- [x] Mise à jour automatique de yt-dlp au démarrage
 - [x] Vérification des mises à jour yt-dlp via l'API GitHub
 - [x] Vérification SHA-256 lorsqu'elle est disponible
 - [x] Mise à jour automatique de MediaVacuum (téléchargement, remplacement de l'exe, relance)
@@ -86,7 +88,7 @@ Types : `feat` | `fix` | `refactor` | `style` | `test` | `docs` | `chore` | `per
 .\publish.ps1
 
 # 3. Créer la release GitHub
-gh release create v0.2.0 --title "v0.2.0" --notes-file RELEASE_NOTES.md .\MediaVacuum-0.2.0-win-x64.zip
+gh release create v0.2.1 --title "v0.2.1" --notes-file RELEASE_NOTES.md .\MediaVacuum-0.2.1-win-x64.zip
 ```
 
 ---

@@ -29,6 +29,7 @@ public sealed class AppServices
         YtDlp = new YtDlpService(AppPaths.YtDlpPath);
         Update = new UpdateService(AppPaths.YtDlpPath);
         Ffmpeg = new FfmpegService(Config.FfmpegPath);
+        JsRuntime = new JsRuntimeService();
         ContextMenu = new ContextMenuManager(Environment.ProcessPath ?? AppPaths.YtDlpPath);
         Installer = new InstallerService();
         Queue = new DownloadQueueService(YtDlp);
@@ -47,6 +48,7 @@ public sealed class AppServices
                 YtDlp,
                 Update,
                 Ffmpeg,
+                JsRuntime,
                 ContextMenu,
                 Installer,
                 Dialog,
@@ -70,6 +72,8 @@ public sealed class AppServices
     public IUpdateService Update { get; }
 
     public IFfmpegService Ffmpeg { get; }
+
+    public IJsRuntimeService JsRuntime { get; }
 
     public IAppUpdateService AppUpdate { get; }
 

@@ -51,4 +51,7 @@ public class DownloadOptions
 
     /// <summary>Directory containing ffmpeg.exe/ffprobe.exe, when available.</summary>
     public string? FfmpegPath { get; set; }
+
+    /// <summary>yt-dlp --js-runtimes value, for example "node" or "deno:C:\...\deno.exe".</summary>
+    public string? JsRuntime { get; set; }
 }

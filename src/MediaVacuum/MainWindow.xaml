@@ -522,6 +522,9 @@
                                       ToolTip="{Binding T[ProbeSizesTooltip]}"
                                       Margin="0,12,0,0" />
                             <CheckBox Content="{Binding T[AutoCheckUpdates]}" IsChecked="{Binding AutoCheckUpdates}" />
+                            <CheckBox Content="{Binding T[AutoUpdateYtDlp]}"
+                                      IsChecked="{Binding AutoUpdateYtDlp}"
+                                      ToolTip="{Binding T[AutoUpdateYtDlpTooltip]}" />
                             <CheckBox Content="{Binding T[AutoUpdateApp]}"
                                       IsChecked="{Binding AutoUpdateApp}"
                                       ToolTip="{Binding T[AutoUpdateAppTooltip]}" />
@@ -538,6 +541,21 @@
                                                Foreground="{DynamicResource TextSecondaryBrush}" />
                                     <Button Content="{Binding T[DownloadFfmpeg]}"
                                             Command="{Binding DownloadFfmpegCommand}"
+                                            Style="{StaticResource SecondaryButton}"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,8,0,0" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Background="{DynamicResource SurfaceAltBrush}" CornerRadius="7" Padding="10" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding T[JsRuntime]}" Style="{StaticResource Label}" />
+                                    <TextBlock Text="{Binding JsRuntimeStatusText}"
+                                               FontSize="11"
+                                               TextWrapping="Wrap"
+                                               Foreground="{DynamicResource TextSecondaryBrush}" />
+                                    <Button Content="{Binding T[DownloadDeno]}"
+                                            Command="{Binding DownloadDenoCommand}"
                                             Style="{StaticResource SecondaryButton}"
                                             HorizontalAlignment="Left"
                                             Margin="0,8,0,0" />

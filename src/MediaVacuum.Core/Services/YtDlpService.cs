@@ -275,9 +275,10 @@ public class YtDlpService : IYtDlpService
 
         if (process.ExitCode != 0)
         {
-            var message = string.IsNullOrWhiteSpace(error) ? lastLines.ToString() : error;
-            AppLog.Warn($"Download failed (exit {process.ExitCode}): {Trim(message)}");
-            return DownloadResult.FromError(Trim(message));
+            var rawOutput = string.Join(Environment.NewLine, error, lastLines.ToString());
+            var message = YtDlpErrorParser.Parse(error, lastLines.ToString());
+            AppLog.Warn($"Download failed (exit {process.ExitCode}): {Trim(rawOutput)}");
+            return DownloadResult.FromError(message);
         }
 
         var path = finalPath ?? expectedPath ?? lastDestination;

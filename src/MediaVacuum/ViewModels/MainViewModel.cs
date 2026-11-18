@@ -21,6 +21,7 @@ public class MainViewModel : INotifyPropertyChanged
     private readonly IYtDlpService _ytDlp;
     private readonly IUpdateService _updateService;
     private readonly IFfmpegService _ffmpeg;
+    private readonly IJsRuntimeService _jsRuntime;
     private readonly IContextMenuService _contextMenu;
     private readonly IInstallerService _installer;
     private readonly IDialogService _dialog;
@@ -36,6 +37,7 @@ public class MainViewModel : INotifyPropertyChanged
     private bool _isDownloading;
     private bool _isInitializing = true;
     private bool _isFfmpegBusy;
+    private bool _isDenoBusy;
     private bool _isAppUpdating;
     private AppUpdateInfo? _appUpdateInfo;
     private bool _isOverallIndeterminate;
@@ -55,6 +57,7 @@ public class MainViewModel : INotifyPropertyChanged
         IYtDlpService ytDlp,
         IUpdateService updateService,
         IFfmpegService ffmpeg,
+        IJsRuntimeService jsRuntime,
         IContextMenuService contextMenu,
         IInstallerService installer,
         IDialogService dialog,
@@ -68,6 +71,7 @@ public class MainViewModel : INotifyPropertyChanged
         _ytDlp = ytDlp;
         _updateService = updateService;
         _ffmpeg = ffmpeg;
+        _jsRuntime = jsRuntime;
         _contextMenu = contextMenu;
         _installer = installer;
         _dialog = dialog;
@@ -96,6 +100,7 @@ public class MainViewModel : INotifyPropertyChanged
         UninstallContextMenuCommand = new RelayCommand(_ => UninstallContextMenu());
         CheckUpdateCommand = new AsyncRelayCommand(_ => CheckUpdateAsync(), _ => !IsBusy);
         DownloadFfmpegCommand = new AsyncRelayCommand(_ => DownloadFfmpegAsync(prompt: true), _ => !_isFfmpegBusy && !IsDownloading);
+        DownloadDenoCommand = new AsyncRelayCommand(_ => DownloadDenoAsync(), _ => !_isDenoBusy && !IsDownloading);
         InstallAppUpdateCommand = new AsyncRelayCommand(_ => InstallAppUpdateAsync(manual: true), _ => CanInstallAppUpdate);
         RetryYtDlpCommand = new AsyncRelayCommand(_ => EnsureYtDlpAsync(), _ => !IsBusy);
         OpenLogsCommand = new RelayCommand(_ => _dialog.OpenFolder(AppPaths.LogsDir));
@@ -479,6 +484,18 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool AutoUpdateYtDlp
+    {
+        get => _config.AutoUpdateYtDlp;
+        set
+        {
+            if (_config.AutoUpdateYtDlp == value) return;
+            _config.AutoUpdateYtDlp = value;
+            SaveConfig();
+            OnPropertyChanged();
+        }
+    }
+
     public bool AutoUpdateApp
     {
         get => _config.AutoUpdateApp;
@@ -519,7 +536,7 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsBusy => IsAnalyzing || IsDownloading || _isInitializing || _isFfmpegBusy || _isAppUpdating;
+    public bool IsBusy => IsAnalyzing || IsDownloading || _isInitializing || _isFfmpegBusy || _isDenoBusy || _isAppUpdating;
 
     public bool IsCancellable => IsAnalyzing || IsDownloading;
 
@@ -596,6 +613,26 @@ public class MainViewModel : INotifyPropertyChanged
             return string.IsNullOrWhiteSpace(version)
                 ? _localization["FfmpegAvailable"]
                 : _localization.Format("FfmpegAvailableFormat", version);
+        }
+    }
+
+    public bool IsJsRuntimeAvailable => _jsRuntime.IsAvailable;
+
+    public string JsRuntimeStatusText
+    {
+        get
+        {
+            if (_isDenoBusy)
+            {
+                return _localization["DenoDownloading"];
+            }
+
+            if (!_jsRuntime.IsAvailable)
+            {
+                return _localization["JsRuntimeMissing"];
+            }
+
+            return _localization.Format("JsRuntimeAvailableFormat", _jsRuntime.Runtime!.Name);
         }
     }
 
@@ -679,6 +716,7 @@ public class MainViewModel : INotifyPropertyChanged
     public ICommand UninstallContextMenuCommand { get; }
     public ICommand CheckUpdateCommand { get; }
     public ICommand DownloadFfmpegCommand { get; }
+    public ICommand DownloadDenoCommand { get; }
     public ICommand InstallAppUpdateCommand { get; }
     public ICommand RetryYtDlpCommand { get; }
     public ICommand OpenLogsCommand { get; }
@@ -724,6 +762,15 @@ public class MainViewModel : INotifyPropertyChanged
             _dialog.ShowError(ex.Message, _localization["YtDlpDownloadFailed"]);
         }
 
+        if (_config.AutoUpdateYtDlp)
+        {
+            await AutoUpdateYtDlpAsync();
+        }
+        else if (_config.AutoCheckUpdates)
+        {
+            _ = SilentUpdateCheckAsync();
+        }
+
         try
         {
             await Task.Run(() => _ffmpeg.DetectAsync());
@@ -734,6 +781,16 @@ public class MainViewModel : INotifyPropertyChanged
             AppLog.Exception("Unable to detect ffmpeg", ex);
         }
 
+        try
+        {
+            await Task.Run(() => _jsRuntime.DetectAsync());
+            UpdateJsRuntimeState();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Unable to detect a JavaScript runtime", ex);
+        }
+
         ContextMenuInstalled = _contextMenu.IsInstalled;
 
         _isInitializing = false;
@@ -742,11 +799,6 @@ public class MainViewModel : INotifyPropertyChanged
         ProgressText = string.Empty;
         UpdateSummary();
         NotifyCommands();
-
-        if (_config.AutoCheckUpdates)
-        {
-            _ = SilentUpdateCheckAsync();
-        }
 
         _ = CheckAppUpdateAsync();
     }
@@ -1292,6 +1344,105 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
+    private async Task AutoUpdateYtDlpAsync()
+    {
+        try
+        {
+            var update = await _updateService.CheckForUpdateAsync();
+            if (update is null)
+            {
+                return;
+            }
+
+            SetStatus("YtDlpUpdating", update.Version);
+            IsOverallIndeterminate = true;
+
+            var progress = new Progress<double>(value =>
+            {
+                IsOverallIndeterminate = false;
+                OverallProgress = value;
+                ProgressText = $"{value:F0}%";
+            });
+
+            await _updateService.UpdateAsync(update, progress);
+            YtDlpVersion = await _ytDlp.GetVersionAsync();
+            SetStatus("UpdateComplete");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Automatic yt-dlp update failed", ex);
+            SetStatus("UpdateCheckFailed");
+        }
+        finally
+        {
+            IsOverallIndeterminate = false;
+            OverallProgress = 0;
+            ProgressText = string.Empty;
+        }
+    }
+
+    private async Task DownloadDenoAsync()
+    {
+        if (_isDenoBusy)
+        {
+            return;
+        }
+
+        if (!_dialog.ShowConfirm(_localization["DenoDownloadPrompt"], _localization["JsRuntime"]))
+        {
+            return;
+        }
+
+        _isDenoBusy = true;
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(JsRuntimeStatusText));
+        NotifyCommands();
+        SetStatus("DenoDownloading");
+        IsOverallIndeterminate = true;
+
+        try
+        {
+            var progress = new Progress<double>(value =>
+            {
+                IsOverallIndeterminate = false;
+                OverallProgress = value;
+                ProgressText = $"{value:F0}%";
+            });
+
+            await _jsRuntime.DownloadDenoAsync(progress);
+            UpdateJsRuntimeState();
+            SetStatus("DenoDownloadComplete");
+            _dialog.ShowInfo(_localization["DenoDownloadComplete"], _localization["JsRuntime"]);
+        }
+        catch (Exception ex)
+        {
+            SetStatus("DenoDownloadFailed");
+            AppLog.Exception("Deno download failed", ex);
+            _dialog.ShowError(ex.Message, _localization["DenoDownloadFailed"]);
+        }
+        finally
+        {
+            _isDenoBusy = false;
+            IsOverallIndeterminate = false;
+            OverallProgress = 0;
+            ProgressText = string.Empty;
+            OnPropertyChanged(nameof(IsBusy));
+            NotifyJsRuntimeChanged();
+        }
+    }
+
+    private void UpdateJsRuntimeState()
+    {
+        NotifyJsRuntimeChanged();
+    }
+
+    private void NotifyJsRuntimeChanged()
+    {
+        OnPropertyChanged(nameof(IsJsRuntimeAvailable));
+        OnPropertyChanged(nameof(JsRuntimeStatusText));
+        NotifyCommands();
+    }
+
     private async Task CheckAppUpdateAsync()
     {
         if (IsDevelopmentBuild || IsDevelopmentPath)
@@ -1567,7 +1718,8 @@ public class MainViewModel : INotifyPropertyChanged
         ConcurrentFragments = _config.ConcurrentFragments,
         LimitRateKb = _config.LimitRateKb,
         OverwriteExisting = _config.OverwriteExisting,
-        FfmpegPath = _ffmpeg.FfmpegPath
+        FfmpegPath = _ffmpeg.FfmpegPath,
+        JsRuntime = _jsRuntime.BuildYtDlpArgument()
     };
 
     private void SaveConfig() => _config.Save();
@@ -1583,6 +1735,8 @@ public class MainViewModel : INotifyPropertyChanged
     {
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(FfmpegStatusText));
+        OnPropertyChanged(nameof(IsJsRuntimeAvailable));
+        OnPropertyChanged(nameof(JsRuntimeStatusText));
         OnPropertyChanged(nameof(SelectedCountText));
         OnPropertyChanged(nameof(QueueCountText));
         OnPropertyChanged(nameof(TotalSizeText));

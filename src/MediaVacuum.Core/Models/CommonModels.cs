@@ -17,3 +17,5 @@ public record AnalysisResult(
     bool HasEstimatedSizes);
 
 public record SizeEstimate(long? Bytes, bool IsApproximate);
+
+public record JsRuntimeInfo(string Name, string? Path, bool IsBundled);

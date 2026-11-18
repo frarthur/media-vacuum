@@ -149,7 +149,30 @@ public class QueueItemViewModel : INotifyPropertyChanged, IDisposable
 
     public bool HasError => !string.IsNullOrWhiteSpace(Item.ErrorMessage);
 
-    public string? ErrorMessage => Item.ErrorMessage;
+    public string? ErrorMessage
+    {
+        get
+        {
+            var error = Item.ErrorMessage;
+            if (string.IsNullOrWhiteSpace(error))
+            {
+                return null;
+            }
+
+            if (error.Contains("403", StringComparison.Ordinal)
+                || error.Contains("Forbidden", StringComparison.OrdinalIgnoreCase))
+            {
+                return error + Environment.NewLine + _localization["Error403Hint"];
+            }
+
+            if (error.Contains("JavaScript runtime", StringComparison.OrdinalIgnoreCase))
+            {
+                return error + Environment.NewLine + _localization["JsRuntimeMissing"];
+            }
+
+            return error;
+        }
+    }
 
     public bool CanOpenFile =>
         !string.IsNullOrWhiteSpace(Item.FilePath) && File.Exists(Item.FilePath);
@@ -178,6 +201,7 @@ public class QueueItemViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(StatusText));
         OnPropertyChanged(nameof(ProgressDetailText));
         OnPropertyChanged(nameof(EtaText));
+        OnPropertyChanged(nameof(ErrorMessage));
     }
 
     /// <summary>Re-evaluates the status brush after a theme change.</summary>

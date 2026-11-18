@@ -62,6 +62,8 @@ public class AppConfig
 
     public bool AutoCheckUpdates { get; set; } = true;
 
+    public bool AutoUpdateYtDlp { get; set; } = true;
+
     public bool AutoUpdateApp { get; set; } = true;
 
     public bool OverwriteExisting { get; set; }

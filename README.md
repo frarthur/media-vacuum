@@ -32,7 +32,8 @@ MediaVacuum wraps [yt-dlp](https://github.com/yt-dlp/yt-dlp) into a clean Window
 - **5 languages** — English, French, Spanish, German and Russian
 - **FFmpeg assistant** — detects an existing ffmpeg build or downloads one (~80 MB) when a conversion needs it
 - **Explorer context menu** — right-click a folder (or its background) → _Download media_
-- **yt-dlp updates** — GitHub Releases check with checksum verification when available
+- **yt-dlp auto-update** — checks GitHub on startup, replaces `yt-dlp.exe` when a newer release is available
+- **JavaScript runtime support** — detects Deno, Node, Bun and QuickJS for YouTube, with an optional Deno download
 - **MediaVacuum self-update** — checks GitHub on startup, replaces the executable and restarts automatically
 - **Portable** — a single self-contained Windows x64 executable
 - **Safe uninstall** — removes only MediaVacuum data, never your downloads or an arbitrary parent folder
@@ -82,6 +83,12 @@ On startup, MediaVacuum checks the latest release of the application on GitHub. 
 The feature is enabled by default and can be disabled with **Install MediaVacuum updates automatically** in the advanced settings. When disabled, an update link appears in the header and can be clicked manually.
 
 > The application must be able to write to the folder containing `MediaVacuum.exe` (portable installs in a user folder work; a protected `Program Files` folder may require manual replacement). Your configuration and downloads are not modified by an update.
+
+## JavaScript runtime (YouTube)
+
+Recent yt-dlp versions need a JavaScript runtime to solve YouTube challenges and expose all formats. MediaVacuum detects **Deno**, **Node**, **Bun** and **QuickJS** on the PATH (and in its own `js` folder), then passes `--js-runtimes` to yt-dlp automatically.
+
+If no runtime is installed, the advanced settings offer a **Download Deno** button (~40 MB). A missing runtime is a common cause of incomplete YouTube format lists or `HTTP Error 403: Forbidden`.
 
 ## FFmpeg
 
@@ -147,7 +154,7 @@ The script produces `publish/MediaVacuum.exe` (single-file, self-contained, win-
 Create a GitHub release:
 
 ```powershell
-gh release create v0.2.0 --title "v0.2.0" --notes-file RELEASE_NOTES.md .\MediaVacuum-0.2.0-win-x64.zip
+gh release create v0.2.1 --title "v0.2.1" --notes-file RELEASE_NOTES.md .\MediaVacuum-0.2.1-win-x64.zip
 ```
 
 ## Command line
@@ -182,7 +189,7 @@ MediaVacuum/
 │   └── MediaVacuum.Installer/      # Explorer context menu, safe data cleanup
 ├── tests/MediaVacuum.Tests/        # xUnit tests
 ├── publish.ps1
-├── Directory.Build.props           # shared version 0.2.0
+├── Directory.Build.props           # shared version 0.2.1
 ├── ROADMAP.md
 └── LICENSE
 ```
@@ -196,6 +203,7 @@ Built with **.NET 9 / WPF / MVVM**. The Core project has no WPF dependency and i
 | `%LOCALAPPDATA%\MediaVacuum\config.json` | Settings |
 | `%LOCALAPPDATA%\MediaVacuum\yt-dlp.exe` | Managed yt-dlp binary |
 | `%LOCALAPPDATA%\MediaVacuum\ffmpeg\` | Optional ffmpeg build |
+| `%LOCALAPPDATA%\MediaVacuum\js\` | Optional Deno runtime |
 | `%LOCALAPPDATA%\MediaVacuum\thumbnails\` | Queue thumbnail cache |
 | `%LOCALAPPDATA%\MediaVacuum\logs\app.log` | Application log |
 | `%LOCALAPPDATA%\MediaVacuum\updates\` | Downloaded MediaVacuum update |
@@ -207,6 +215,7 @@ Built with **.NET 9 / WPF / MVVM**. The Core project has no WPF dependency and i
 - On Windows 11, the classic Explorer context menu may appear under **Show more options**.
 - Downloading a very large channel can produce a long queue; analysis and size estimation take time.
 - Some sites require cookies or authentication; MediaVacuum does not manage accounts or cookies yet.
+- YouTube may still return `403 Forbidden` for age-restricted, region-restricted or bot-checked videos even with an up-to-date yt-dlp and a JavaScript runtime; cookies are not managed yet.
 - Automatic MediaVacuum replacement requires write access to the folder containing the executable.
 
 ---

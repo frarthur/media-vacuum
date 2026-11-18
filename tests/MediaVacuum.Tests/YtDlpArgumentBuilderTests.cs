@@ -57,6 +57,23 @@ public class YtDlpArgumentBuilderTests
     }
 
     [Fact]
+    public void Build_AddsJavaScriptRuntimeWhenAvailable()
+    {
+        var args = YtDlpArgumentBuilder.Build(
+            CreateItem(),
+            new DownloadOptions
+            {
+                JsRuntime = "node",
+                EmbedThumbnail = false,
+                EmbedMetadata = false
+            });
+
+        var index = args.IndexOf("--js-runtimes");
+        Assert.True(index >= 0);
+        Assert.Equal("node", args[index + 1]);
+    }
+
+    [Fact]
     public void Build_AddsFfmpegLocationWhenAvailable()
     {
         var args = YtDlpArgumentBuilder.Build(

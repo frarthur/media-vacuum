@@ -1,5 +1,15 @@
 # MediaVacuum — Notes de version
 
+## v0.2.1
+
+### Corrections
+
+- **Mise à jour automatique de yt-dlp au démarrage** : MediaVacuum vérifie GitHub et remplace `yt-dlp.exe` si une version plus récente est disponible. Les anciennes versions de yt-dlp provoquent souvent des erreurs `HTTP Error 403: Forbidden` sur YouTube. L'option est activée par défaut et désactivable dans les réglages avancés.
+- **Runtime JavaScript pour YouTube** : yt-dlp a besoin de Deno, Node, Bun ou QuickJS pour résoudre certains challenges YouTube. MediaVacuum détecte maintenant ces runtimes et transmet automatiquement `--js-runtimes` à yt-dlp. Un bouton permet de télécharger Deno si aucun runtime n'est installé.
+- **Messages d'erreur nettoyés** : les avertissements yt-dlp (ancienne version, runtime JavaScript, passage WebM → MKV pour les miniatures) ne sont plus affichés comme des erreurs. Seules les lignes `ERROR:` pertinentes sont conservées.
+- **Aide pour les erreurs 403** : l'interface conseille de mettre à jour yt-dlp, d'installer un runtime JavaScript et, si nécessaire, d'utiliser des cookies.
+- **Tests** : 60 tests unitaires, dont le parsing des erreurs yt-dlp et l'argument `--js-runtimes`.
+
 ## v0.2.0
 
 ### Nouveautés

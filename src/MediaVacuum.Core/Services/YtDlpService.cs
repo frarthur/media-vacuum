@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using MediaVacuum.Core.Interfaces;
 using MediaVacuum.Core.Models;
@@ -7,237 +9,396 @@ namespace MediaVacuum.Core.Services;
 
 public class YtDlpService : IYtDlpService
 {
-    private readonly string _ytDlpPath;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
-    public string YtDlpPath => _ytDlpPath;
+    private readonly string _ytDlpPath;
+    private readonly ConcurrentDictionary<int, Process> _activeProcesses = new();
 
     public YtDlpService(string? ytDlpPath = null)
     {
-        _ytDlpPath = ytDlpPath ?? LocateYtDlp();
+        _ytDlpPath = string.IsNullOrWhiteSpace(ytDlpPath) ? AppPaths.YtDlpPath : ytDlpPath;
     }
 
-    public async Task<MediaInfo?> GetMediaInfoAsync(string url, CancellationToken ct = default)
+    public string YtDlpPath => _ytDlpPath;
+
+    public bool Exists
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _ytDlpPath,
-            Arguments = $"--dump-single-json --no-download \"{url}\"",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-
-        var output = await process.StandardOutput.ReadToEndAsync(ct);
-        await process.WaitForExitAsync(ct);
-
-        if (process.ExitCode != 0) return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<MediaInfo>(output);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    public async Task<DownloadResult> DownloadAsync(DownloadOptions options, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default)
-    {
-        var args = BuildArguments(options);
-        var outputDir = options.OutputDirectory;
-
-        if (!Directory.Exists(outputDir))
-        {
-            Directory.CreateDirectory(outputDir);
-        }
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _ytDlpPath,
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        startInfo.EnvironmentVariables["YTDLP_NO_LAZY_EXTRACTORS"] = "1";
-
-        using var process = new Process { StartInfo = startInfo };
-
-        var outputBuilder = new System.Text.StringBuilder();
-        var errorBuilder = new System.Text.StringBuilder();
-
-        process.Start();
-
-        var readTask = Task.Run(async () =>
-        {
-            while (!process.StandardOutput.EndOfStream)
-            {
-                var line = await process.StandardOutput.ReadLineAsync(ct);
-                if (line == null) continue;
-
-                outputBuilder.AppendLine(line);
-                ParseProgress(line, progress);
-            }
-        }, ct);
-
-        var errorTask = process.StandardError.ReadToEndAsync(ct);
-
-        await Task.WhenAll(readTask, errorTask);
-        await process.WaitForExitAsync(ct);
-
-        var output = outputBuilder.ToString();
-        var error = errorTask.Result;
-
-        if (process.ExitCode != 0)
-        {
-            return DownloadResult.FromError(string.IsNullOrEmpty(error) ? output : error);
-        }
-
-        return ParseDownloadResult(output, options);
-    }
-
-    public async Task<string> GetVersionAsync()
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _ytDlpPath,
-            Arguments = "--version",
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-
-        var version = await process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        return version.Trim();
-    }
-
-    private static string BuildArguments(DownloadOptions options)
-    {
-        var args = new List<string>
-        {
-            "--newline",
-            "--progress",
-            "--no-simulate"
-        };
-
-        if (!string.IsNullOrEmpty(options.Format) && options.Format != "best")
-        {
-            args.Add($"-f \"{options.Format}\"");
-        }
-
-        if (options.ExtractAudio)
-        {
-            args.Add("-x");
-            if (!string.IsNullOrEmpty(options.AudioFormat))
-            {
-                args.Add($"--audio-format {options.AudioFormat}");
-            }
-        }
-
-        if (options.EmbedMetadata) args.Add("--embed-metadata");
-        if (options.EmbedThumbnail) args.Add("--embed-thumbnail");
-        if (options.WriteSubtitles) args.Add("--write-subs");
-        if (!string.IsNullOrEmpty(options.SubtitleLanguages)) args.Add($"--sub-langs \"{options.SubtitleLanguages}\"");
-        if (options.ConcurrentFragments.HasValue) args.Add($"-N {options.ConcurrentFragments.Value}");
-        if (!string.IsNullOrEmpty(options.LimitRate)) args.Add($"-r {options.LimitRate}");
-        if (!options.Playlist) args.Add("--no-playlist");
-
-        args.Add($"-P \"{options.OutputDirectory}\"");
-        args.Add($"\"{options.Url}\"");
-
-        return string.Join(" ", args);
-    }
-
-    private static void ParseProgress(string line, IProgress<DownloadProgress>? progress)
-    {
-        if (progress == null) return;
-
-        if (line.StartsWith("[download]") && line.Contains('%'))
+        get
         {
             try
             {
-                var parts = line.Split(' ');
-                var progressData = new DownloadProgress { Status = "downloading" };
-
-                foreach (var part in parts)
-                {
-                    if (part.EndsWith('%') && double.TryParse(part.TrimEnd('%'), out var pct))
-                    {
-                        progressData.Percentage = pct;
-                    }
-                    else if (part.Contains("MiB/s") || part.Contains("KiB/s"))
-                    {
-                        progressData.Speed = part;
-                    }
-                    else if (part.Contains("ETA"))
-                    {
-                        progressData.Eta = part.Replace("ETA", "").Trim();
-                    }
-                }
-
-                progress.Report(progressData);
+                return File.Exists(_ytDlpPath) && new FileInfo(_ytDlpPath).Length > 1_000_000;
             }
             catch
             {
+                return false;
             }
-        }
-        else if (line.StartsWith("[ExtractAudio]") || line.StartsWith("[Merger]") || line.StartsWith("[Metadata]"))
-        {
-            progress.Report(new DownloadProgress { Status = "post-processing", CurrentFile = line });
         }
     }
 
-    private static DownloadResult ParseDownloadResult(string output, DownloadOptions options)
+    public void KillActiveProcesses()
     {
-        var result = new DownloadResult
+        foreach (var process in _activeProcesses.Values.ToArray())
         {
-            Success = true,
-            RawOutput = output
-        };
-
-        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var line in lines)
-        {
-            if (line.Contains("Destination:"))
-            {
-                var filePath = line["Destination:".Length..].Trim();
-                result.FilePath = filePath;
-                break;
-            }
+            TryKill(process);
         }
-
-        return result;
     }
 
-    private static string LocateYtDlp()
+    public async Task<MediaInfo?> GetMediaInfoAsync(
+        string url,
+        bool flatPlaylist,
+        bool noPlaylist,
+        CancellationToken ct = default)
     {
-        var searchPaths = new[]
+        EnsureExecutable();
+
+        var args = new List<string>
         {
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "yt-dlp.exe"),
-            Path.Combine(Environment.CurrentDirectory, "yt-dlp.exe"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MediaVacuum", "yt-dlp.exe")
+            "--dump-single-json",
+            "--no-download",
+            "--no-warnings",
+            "--no-color"
         };
 
-        foreach (var path in searchPaths)
+        if (flatPlaylist)
         {
-            if (File.Exists(path))
+            args.Add("--flat-playlist");
+        }
+
+        if (noPlaylist)
+        {
+            args.Add("--no-playlist");
+        }
+
+        args.Add(url);
+
+        using var process = CreateProcess(args);
+        try
+        {
+            process.Start();
+            _activeProcesses[process.Id] = process;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Unable to start yt-dlp for media info", ex);
+            return null;
+        }
+
+        try
+        {
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+            try
             {
-                return path;
+                await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                TryKill(process);
+                throw;
+            }
+
+            var output = await stdoutTask.ConfigureAwait(false);
+            var error = await stderrTask.ConfigureAwait(false);
+
+            if (process.ExitCode != 0)
+            {
+                AppLog.Warn($"yt-dlp media info failed (exit {process.ExitCode}): {Trim(error)}");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                AppLog.Warn("yt-dlp returned empty media info.");
+                return null;
+            }
+
+            try
+            {
+                return JsonSerializer.Deserialize<MediaInfo>(output, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                AppLog.Exception("Unable to parse yt-dlp JSON", ex);
+                return null;
+            }
+        }
+        finally
+        {
+            _activeProcesses.TryRemove(process.Id, out _);
+        }
+    }
+
+    public async Task<DownloadResult> DownloadAsync(
+        DownloadItem item,
+        DownloadOptions options,
+        IProgress<DownloadProgress>? progress = null,
+        CancellationToken ct = default)
+    {
+        EnsureExecutable();
+
+        Directory.CreateDirectory(options.OutputDirectory);
+
+        var args = YtDlpArgumentBuilder.Build(item, options, options.FfmpegPath);
+        AppLog.Info($"Starting download: {item.Url}");
+        AppLog.Info("yt-dlp " + string.Join(' ', args));
+
+        using var process = CreateProcess(args);
+
+        var lastLines = new StringBuilder();
+        var lastLinesLock = new object();
+        string? finalPath = null;
+        string? expectedPath = null;
+        string? lastDestination = null;
+        long? fileSize = null;
+        var alreadyDownloaded = false;
+
+        void Remember(string line)
+        {
+            lock (lastLinesLock)
+            {
+                if (lastLines.Length > 16_000)
+                {
+                    lastLines.Remove(0, lastLines.Length - 12_000);
+                }
+
+                lastLines.AppendLine(line);
             }
         }
 
-        return "yt-dlp.exe";
+        void HandleLine(string line)
+        {
+            Remember(line);
+
+            if (line.Contains("Destination:", StringComparison.Ordinal))
+            {
+                lastDestination = line[(line.IndexOf("Destination:", StringComparison.Ordinal) + "Destination:".Length)..].Trim();
+            }
+
+            var parsed = ProgressParser.Parse(line);
+            if (parsed is null)
+            {
+                return;
+            }
+
+            switch (parsed.Kind)
+            {
+                case ProgressLineKind.Download:
+                    progress?.Report(parsed.Progress!);
+                    break;
+
+                case ProgressLineKind.PostProcessing:
+                    progress?.Report(new DownloadProgress { Status = "postprocessing" });
+                    break;
+
+                case ProgressLineKind.FileName:
+                    expectedPath = parsed.FilePath;
+                    break;
+
+                case ProgressLineKind.FileCompleted:
+                    finalPath = parsed.FilePath;
+                    fileSize = parsed.FileSize;
+                    break;
+
+                case ProgressLineKind.AlreadyDownloaded:
+                    alreadyDownloaded = true;
+                    break;
+            }
+        }
+
+        try
+        {
+            process.Start();
+            _activeProcesses[process.Id] = process;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Unable to start yt-dlp", ex);
+            return DownloadResult.FromError(ex.Message);
+        }
+
+        var stdoutTask = Task.Run(async () =>
+        {
+            while (true)
+            {
+                var line = await process.StandardOutput.ReadLineAsync().ConfigureAwait(false);
+                if (line is null)
+                {
+                    break;
+                }
+
+                HandleLine(line);
+            }
+        }, CancellationToken.None);
+
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+        try
+        {
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            AppLog.Info($"Download cancelled: {item.Url}");
+            throw;
+        }
+        finally
+        {
+            try
+            {
+                await stdoutTask.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppLog.Exception("Error while reading yt-dlp output", ex);
+            }
+            finally
+            {
+                _activeProcesses.TryRemove(process.Id, out _);
+            }
+        }
+
+        string error;
+        try
+        {
+            error = await stderrTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            error = string.Empty;
+        }
+
+        if (process.ExitCode != 0)
+        {
+            var message = string.IsNullOrWhiteSpace(error) ? lastLines.ToString() : error;
+            AppLog.Warn($"Download failed (exit {process.ExitCode}): {Trim(message)}");
+            return DownloadResult.FromError(Trim(message));
+        }
+
+        var path = finalPath ?? expectedPath ?? lastDestination;
+        if (alreadyDownloaded && string.IsNullOrWhiteSpace(path))
+        {
+            AppLog.Info($"Already downloaded: {item.Url}");
+        }
+
+        if (fileSize is null && !string.IsNullOrWhiteSpace(path) && File.Exists(path))
+        {
+            try
+            {
+                fileSize = new FileInfo(path).Length;
+            }
+            catch
+            {
+                // The file may have been moved by the user while downloading.
+            }
+        }
+
+        AppLog.Info($"Download completed: {item.Url} -> {path}");
+        return DownloadResult.FromSuccess(path, item.Title, fileSize);
+    }
+
+    public async Task<string> GetVersionAsync(CancellationToken ct = default)
+    {
+        if (!Exists)
+        {
+            return "0.0.0";
+        }
+
+        var args = new List<string> { "--version", "--no-color" };
+        using var process = CreateProcess(args);
+        int? processId = null;
+
+        try
+        {
+            process.Start();
+            processId = process.Id;
+            _activeProcesses[processId.Value] = process;
+            var output = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            return output.Trim();
+        }
+        catch (OperationCanceledException)
+        {
+            TryKill(process);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Unable to read yt-dlp version", ex);
+            return "0.0.0";
+        }
+        finally
+        {
+            if (processId.HasValue)
+            {
+                _activeProcesses.TryRemove(processId.Value, out _);
+            }
+        }
+    }
+
+    private Process CreateProcess(IEnumerable<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = _ytDlpPath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            WorkingDirectory = AppContext.BaseDirectory
+        };
+
+        startInfo.Environment["PYTHONUTF8"] = "1";
+        startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
+
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        var process = new Process { StartInfo = startInfo };
+        process.EnableRaisingEvents = true;
+        return process;
+    }
+
+    private void EnsureExecutable()
+    {
+        if (!Exists)
+        {
+            throw new FileNotFoundException("yt-dlp.exe was not found or is incomplete.", _ytDlpPath);
+        }
+    }
+
+    private static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // Best effort.
+        }
+    }
+
+    private static string Trim(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        value = value.Trim();
+        return value.Length <= 4000 ? value : value[^4000..];
     }
 }

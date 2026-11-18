@@ -4,28 +4,24 @@ namespace MediaVacuum.Core.Interfaces;
 
 public interface IYtDlpService
 {
-    Task<MediaInfo?> GetMediaInfoAsync(string url, CancellationToken ct = default);
-
-    Task<DownloadResult> DownloadAsync(DownloadOptions options, IProgress<DownloadProgress>? progress = null, CancellationToken ct = default);
-
-    Task<string> GetVersionAsync();
-
     string YtDlpPath { get; }
-}
 
-public class DownloadProgress
-{
-    public double? Percentage { get; set; }
+    bool Exists { get; }
 
-    public string? Speed { get; set; }
+    Task<MediaInfo?> GetMediaInfoAsync(
+        string url,
+        bool flatPlaylist,
+        bool noPlaylist,
+        CancellationToken ct = default);
 
-    public string? Eta { get; set; }
+    Task<DownloadResult> DownloadAsync(
+        DownloadItem item,
+        DownloadOptions options,
+        IProgress<DownloadProgress>? progress = null,
+        CancellationToken ct = default);
 
-    public long? DownloadedBytes { get; set; }
+    Task<string> GetVersionAsync(CancellationToken ct = default);
 
-    public long? TotalBytes { get; set; }
-
-    public string? Status { get; set; }
-
-    public string? CurrentFile { get; set; }
+    /// <summary>Kills any yt-dlp processes started by this service (used when closing the app).</summary>
+    void KillActiveProcesses();
 }

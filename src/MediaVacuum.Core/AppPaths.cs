@@ -11,17 +11,32 @@ public static class AppPaths
 
     public static string YtDlpPath => Path.Combine(DataDir, "yt-dlp.exe");
 
+    public static string FfmpegDir => Path.Combine(DataDir, "ffmpeg");
+
+    public static string FfmpegPath => Path.Combine(FfmpegDir, "ffmpeg.exe");
+
+    public static string FfprobePath => Path.Combine(FfmpegDir, "ffprobe.exe");
+
+    public static string ThumbsDir => Path.Combine(DataDir, "thumbnails");
+
+    public static string LogsDir => Path.Combine(DataDir, "logs");
+
+    public static string LogPath => Path.Combine(LogsDir, "app.log");
+
+    public static string TempDir => Path.Combine(Path.GetTempPath(), "MediaVacuum");
+
     public static string LogoPath => Path.Combine(DataDir, "logo_app.png");
 
     public static void EnsureDataDir()
     {
-        if (!Directory.Exists(DataDir))
-            Directory.CreateDirectory(DataDir);
+        Directory.CreateDirectory(DataDir);
     }
 
-    public static void EnsureTranslationsDir()
+    public static void EnsureAll()
     {
-        if (!Directory.Exists(TranslationsDir))
-            Directory.CreateDirectory(TranslationsDir);
+        Directory.CreateDirectory(DataDir);
+        Directory.CreateDirectory(ThumbsDir);
+        Directory.CreateDirectory(LogsDir);
+        Directory.CreateDirectory(TempDir);
     }
 }

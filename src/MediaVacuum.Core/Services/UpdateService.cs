@@ -1,45 +1,53 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text.Json;
+using MediaVacuum.Core.Interfaces;
+using MediaVacuum.Core.Models;
+using MediaVacuum.Core.Utilities;
 
 namespace MediaVacuum.Core.Services;
 
-public class UpdateService
+public class UpdateService : IUpdateService
 {
-    private const string YtDlpReleasesUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+    private const string LatestApiUrl = "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest";
+    private const string LatestDownloadUrl = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
 
     private readonly string _targetPath;
-
     private readonly HttpClient _httpClient;
+    private readonly HttpClient _redirectClient;
+
+    public UpdateService(string targetPath, HttpClient? httpClient = null)
+    {
+        _targetPath = targetPath;
+
+        if (httpClient is not null)
+        {
+            _httpClient = httpClient;
+        }
+        else
+        {
+            _httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+            _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("MediaVacuum", "0.2"));
+        }
+
+        _redirectClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        _redirectClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("MediaVacuum", "0.2"));
+    }
 
     public string CurrentVersion { get; private set; } = string.Empty;
 
     public string? LatestVersion { get; private set; }
 
-    public UpdateService(string targetPath, HttpClient? httpClient = null)
-    {
-        _targetPath = targetPath;
-        _httpClient = httpClient ?? new HttpClient();
-        _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("MediaVacuum", "1.0"));
-    }
-
-    public async Task<bool> CheckForUpdateAsync()
+    public bool Exists()
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Head, YtDlpReleasesUrl);
-            request.Headers.UserAgent.ParseAdd("MediaVacuum/1.0");
-
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-
-            if (response.Headers.Location != null)
-            {
-                var redirectUrl = response.Headers.Location.ToString();
-                LatestVersion = ExtractVersionFromUrl(redirectUrl);
-            }
-
-            CurrentVersion = await GetCurrentVersionAsync();
-
-            return LatestVersion != null && LatestVersion != CurrentVersion;
+            return File.Exists(_targetPath) && new FileInfo(_targetPath).Length > 1_000_000;
         }
         catch
         {
@@ -47,100 +55,320 @@ public class UpdateService
         }
     }
 
-    public async Task UpdateAsync(IProgress<double>? progress = null, CancellationToken ct = default)
+    public async Task<UpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
-        using var response = await _httpClient.GetAsync(YtDlpReleasesUrl, HttpCompletionOption.ResponseHeadersRead, ct);
-        response.EnsureSuccessStatusCode();
+        CurrentVersion = await GetCurrentVersionAsync(ct).ConfigureAwait(false);
 
-        var totalBytes = response.Content.Headers.ContentLength ?? -1;
-        await using var contentStream = await response.Content.ReadAsStreamAsync(ct);
-        await using var fileStream = new FileStream(_targetPath + ".tmp", FileMode.Create, FileAccess.Write, FileShare.None);
-
-        var buffer = new byte[8192];
-        var totalRead = 0L;
-        int bytesRead;
-
-        while ((bytesRead = await contentStream.ReadAsync(buffer, ct)) > 0)
+        UpdateInfo? info = null;
+        try
         {
-            await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
-            totalRead += bytesRead;
-
-            if (totalBytes > 0)
-            {
-                progress?.Report((double)totalRead / totalBytes * 100);
-            }
+            info = await CheckWithApiAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("GitHub API update check failed, falling back to redirect check", ex);
         }
 
-        await fileStream.FlushAsync(ct);
-        fileStream.Close();
+        info ??= await CheckWithRedirectAsync(ct).ConfigureAwait(false);
 
-        if (File.Exists(_targetPath))
-        {
-            File.Delete(_targetPath);
-        }
-
-        File.Move(_targetPath + ".tmp", _targetPath);
+        LatestVersion = info?.Version;
+        return info;
     }
 
-    public bool Exists()
+    public async Task UpdateAsync(
+        UpdateInfo update,
+        IProgress<double>? progress = null,
+        CancellationToken ct = default)
     {
-        return File.Exists(_targetPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(_targetPath)!);
+
+        var tempPath = _targetPath + ".download";
+        try
+        {
+            using var response = await _httpClient
+                .GetAsync(update.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+
+            response.EnsureSuccessStatusCode();
+
+            var totalBytes = response.Content.Headers.ContentLength ?? -1;
+            await using var content = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            await using (var file = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var buffer = new byte[81920];
+                long totalRead = 0;
+                int read;
+
+                while ((read = await content.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+                {
+                    await file.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
+                    totalRead += read;
+
+                    if (totalBytes > 0)
+                    {
+                        progress?.Report((double)totalRead / totalBytes * 100);
+                    }
+                }
+
+                await file.FlushAsync(ct).ConfigureAwait(false);
+            }
+
+            var length = new FileInfo(tempPath).Length;
+            if (length < 1_000_000)
+            {
+                throw new InvalidOperationException("Downloaded yt-dlp.exe is unexpectedly small.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(update.Sha256))
+            {
+                var actual = ComputeSha256(tempPath);
+                if (!string.Equals(actual, NormalizeDigest(update.Sha256), StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Checksum mismatch for yt-dlp.exe.");
+                }
+            }
+
+            try
+            {
+                File.Move(tempPath, _targetPath, true);
+            }
+            catch (IOException)
+            {
+                // The old binary may be locked by a running yt-dlp process.
+                if (File.Exists(_targetPath))
+                {
+                    File.Delete(_targetPath);
+                }
+
+                File.Move(tempPath, _targetPath);
+            }
+
+            CurrentVersion = update.Version;
+            LatestVersion = update.Version;
+            progress?.Report(100);
+            AppLog.Info($"yt-dlp updated to {update.Version}.");
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
+                }
+            }
+            catch
+            {
+                // Best effort.
+            }
+        }
     }
 
     public async Task EnsureDownloadedAsync(IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        if (File.Exists(_targetPath)) return;
-
-        await UpdateAsync(progress, ct);
-    }
-
-    public async Task UpdateYtDlpSelfAsync()
-    {
-        var startInfo = new ProcessStartInfo
+        if (Exists())
         {
-            FileName = _targetPath,
-            Arguments = "-U",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            return;
+        }
 
-        using var process = new Process { StartInfo = startInfo };
-        process.Start();
-        await process.WaitForExitAsync();
+        AppLog.Info("yt-dlp.exe not found, downloading it.");
+        var info = await CheckForUpdateAsync(ct).ConfigureAwait(false);
+        info ??= new UpdateInfo("latest", LatestDownloadUrl, null, null);
+
+        if (string.Equals(info.Version, "latest", StringComparison.OrdinalIgnoreCase))
+        {
+            info = info with { Version = await ResolveLatestVersionFromRedirectAsync(ct).ConfigureAwait(false) ?? "latest" };
+        }
+
+        await UpdateAsync(info, progress, ct).ConfigureAwait(false);
     }
 
-    private async Task<string> GetCurrentVersionAsync()
+    public async Task<string> GetCurrentVersionAsync(CancellationToken ct = default)
     {
-        if (!File.Exists(_targetPath)) return "0.0.0";
+        if (!Exists())
+        {
+            return "0.0.0";
+        }
 
         try
         {
             var startInfo = new ProcessStartInfo
             {
                 FileName = _targetPath,
-                Arguments = "--version",
-                RedirectStandardOutput = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
             };
+            startInfo.ArgumentList.Add("--version");
 
             using var process = new Process { StartInfo = startInfo };
             process.Start();
-
-            var version = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            return version.Trim();
+            var output = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+            return string.IsNullOrWhiteSpace(output) ? "0.0.0" : output.Trim();
         }
-        catch
+        catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Unable to read current yt-dlp version", ex);
             return "0.0.0";
         }
     }
 
-    private static string? ExtractVersionFromUrl(string url)
+    private async Task<UpdateInfo?> CheckWithApiAsync(CancellationToken ct)
     {
-        var segments = url.Split('/');
-        return segments.Length > 0 ? segments[^2] : null;
+        using var request = new HttpRequestMessage(HttpMethod.Get, LatestApiUrl);
+        request.Headers.UserAgent.ParseAdd("MediaVacuum/0.2");
+        request.Headers.Accept.ParseAdd("application/vnd.github+json");
+
+        using var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException($"GitHub API returned {(int)response.StatusCode}.");
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        var root = document.RootElement;
+
+        var tag = root.TryGetProperty("tag_name", out var tagElement) ? tagElement.GetString() : null;
+        var releaseUrl = root.TryGetProperty("html_url", out var urlElement) ? urlElement.GetString() : null;
+
+        if (string.IsNullOrWhiteSpace(tag))
+        {
+            return null;
+        }
+
+        string? downloadUrl = null;
+        string? digest = null;
+
+        if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var asset in assets.EnumerateArray())
+            {
+                var name = asset.TryGetProperty("name", out var nameElement) ? nameElement.GetString() : null;
+                if (!string.Equals(name, "yt-dlp.exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                downloadUrl = asset.TryGetProperty("browser_download_url", out var downloadElement)
+                    ? downloadElement.GetString()
+                    : null;
+                digest = asset.TryGetProperty("digest", out var digestElement)
+                    ? digestElement.GetString()
+                    : null;
+                break;
+            }
+        }
+
+        downloadUrl ??= LatestDownloadUrl;
+
+        if (!VersionComparer.IsNewer(tag, CurrentVersion))
+        {
+            return null;
+        }
+
+        return new UpdateInfo(tag, downloadUrl, digest, releaseUrl, "yt-dlp.exe");
+    }
+
+    private async Task<UpdateInfo?> CheckWithRedirectAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, LatestDownloadUrl);
+            using var response = await _redirectClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+
+            var location = response.Headers.Location;
+            if (location is null && response.StatusCode is not (HttpStatusCode.MovedPermanently
+                or HttpStatusCode.Redirect
+                or HttpStatusCode.RedirectMethod
+                or HttpStatusCode.TemporaryRedirect
+                or HttpStatusCode.PermanentRedirect))
+            {
+                return null;
+            }
+
+            var version = ExtractVersionFromUrl(location?.ToString());
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                return null;
+            }
+
+            if (!VersionComparer.IsNewer(version, CurrentVersion))
+            {
+                return null;
+            }
+
+            return new UpdateInfo(version, LatestDownloadUrl, null, null, "yt-dlp.exe");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Exception("Redirect based update check failed", ex);
+            return null;
+        }
+    }
+
+    private async Task<string?> ResolveLatestVersionFromRedirectAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, LatestDownloadUrl);
+            using var response = await _redirectClient
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+                .ConfigureAwait(false);
+            return ExtractVersionFromUrl(response.Headers.Location?.ToString());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? ExtractVersionFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var segments = url.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < segments.Length - 1; i++)
+        {
+            if (string.Equals(segments[i], "download", StringComparison.OrdinalIgnoreCase))
+            {
+                return segments[i + 1];
+            }
+        }
+
+        return null;
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Convert.ToHexString(SHA256.HashData(stream));
+    }
+
+    private static string NormalizeDigest(string digest)
+    {
+        var value = digest.Trim();
+        return value.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase)
+            ? value["sha256:".Length..]
+            : value;
     }
 }

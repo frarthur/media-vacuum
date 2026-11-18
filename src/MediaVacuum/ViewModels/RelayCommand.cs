@@ -22,6 +22,8 @@ public class RelayCommand : ICommand
     public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
 
     public void Execute(object? parameter) => _execute(parameter);
+
+    public void NotifyCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }
 
 public class AsyncRelayCommand : ICommand
@@ -46,7 +48,10 @@ public class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
-        if (_isExecuting) return;
+        if (_isExecuting)
+        {
+            return;
+        }
 
         _isExecuting = true;
         CommandManager.InvalidateRequerySuggested();
@@ -61,4 +66,6 @@ public class AsyncRelayCommand : ICommand
             CommandManager.InvalidateRequerySuggested();
         }
     }
+
+    public void NotifyCanExecuteChanged() => CommandManager.InvalidateRequerySuggested();
 }

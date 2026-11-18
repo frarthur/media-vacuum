@@ -1,13 +1,20 @@
-using System.Security.Principal;
-using System.Diagnostics;
+using MediaVacuum.Core;
+using MediaVacuum.Core.Interfaces;
 using Microsoft.Win32;
 
 namespace MediaVacuum.Installer;
 
-public class ContextMenuManager
+/// <summary>
+/// Registers a per-user Explorer context menu (HKCU, no elevation required).
+/// Works both on a folder background and on a folder item.
+/// </summary>
+public class ContextMenuManager : IContextMenuService
 {
-    private const string KeyPath = @"Software\Classes\Directory\Background\shell\MediaVacuum";
-    private const string CommandKeyPath = @"Software\Classes\Directory\Background\shell\MediaVacuum\command";
+    private const string BackgroundKeyPath =
+        @"Software\Classes\Directory\Background\shell\MediaVacuum";
+
+    private const string DirectoryKeyPath =
+        @"Software\Classes\Directory\shell\MediaVacuum";
 
     private readonly string _appPath;
 
@@ -16,68 +23,50 @@ public class ContextMenuManager
         _appPath = appPath;
     }
 
-    public static bool IsElevated
-    {
-        get
-        {
-            using var identity = WindowsIdentity.GetCurrent();
-            var principal = new WindowsPrincipal(identity);
-            return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
-    }
-
-    public static void RestartAsAdmin(string? args = null)
-    {
-        var processInfo = new ProcessStartInfo
-        {
-            FileName = Environment.ProcessPath!,
-            UseShellExecute = true,
-            Verb = "runas"
-        };
-
-        if (!string.IsNullOrEmpty(args))
-        {
-            processInfo.Arguments = args;
-        }
-
-        Process.Start(processInfo);
-    }
-
     public bool IsInstalled
     {
         get
         {
-            using var key = Registry.CurrentUser.OpenSubKey(CommandKeyPath);
-            return key != null;
+            using var background = Registry.CurrentUser.OpenSubKey(BackgroundKeyPath + @"\command");
+            using var directory = Registry.CurrentUser.OpenSubKey(DirectoryKeyPath + @"\command");
+            return background is not null && directory is not null;
         }
     }
 
-    public void Install()
+    public void Install(string verb)
     {
-        using var shellKey = Registry.CurrentUser.CreateSubKey(KeyPath);
-        shellKey.SetValue("MUIVerb", "Download media");
-        shellKey.SetValue("Icon", _appPath);
-
-        using var commandKey = Registry.CurrentUser.CreateSubKey(CommandKeyPath);
-        commandKey.SetValue("", $"\"{_appPath}\" \"%V\"");
+        var label = string.IsNullOrWhiteSpace(verb) ? "Download media" : verb;
+        InstallEntry(BackgroundKeyPath, label, "%V");
+        InstallEntry(DirectoryKeyPath, label, "%1");
+        AppLog.Info("Explorer context menu installed.");
     }
 
     public void Uninstall()
     {
-        try
-        {
-            Registry.CurrentUser.DeleteSubKeyTree(CommandKeyPath, false);
-        }
-        catch
-        {
-        }
+        DeleteTree(BackgroundKeyPath);
+        DeleteTree(DirectoryKeyPath);
+        AppLog.Info("Explorer context menu removed.");
+    }
 
+    private void InstallEntry(string keyPath, string label, string argument)
+    {
+        using var shellKey = Registry.CurrentUser.CreateSubKey(keyPath);
+        shellKey.SetValue("MUIVerb", label);
+        shellKey.SetValue("Icon", _appPath);
+
+        using var commandKey = Registry.CurrentUser.CreateSubKey(keyPath + @"\command");
+        commandKey.SetValue(string.Empty, $"\"{_appPath}\" --folder \"{argument}\"");
+    }
+
+    private static void DeleteTree(string keyPath)
+    {
         try
         {
-            Registry.CurrentUser.DeleteSubKeyTree(KeyPath, false);
+            Registry.CurrentUser.DeleteSubKeyTree(keyPath, throwOnMissingSubKey: false);
         }
-        catch
+        catch (Exception ex)
         {
+            AppLog.Exception($"Unable to remove registry key {keyPath}", ex);
         }
     }
 }

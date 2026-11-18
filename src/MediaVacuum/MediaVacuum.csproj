@@ -6,19 +6,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Management" Version="9.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Translations\*.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="Assets\*.*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <Resource Include="Assets\logo_app.png" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -27,15 +15,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <!-- <ApplicationIcon>Assets\icon.ico</ApplicationIcon> -->
     <Title>MediaVacuum</Title>
-    <Description>Interface graphique pour yt-dlp - Téléchargement de médias</Description>
+    <Description>GUI wrapper for yt-dlp - download and convert media</Description>
     <Company>MediaVacuum</Company>
     <Product>MediaVacuum</Product>
-    <Copyright>© 2024 MediaVacuum</Copyright>
     <AssemblyName>MediaVacuum</AssemblyName>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
 

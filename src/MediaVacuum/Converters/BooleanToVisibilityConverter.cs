@@ -12,7 +12,7 @@ public class BooleanToVisibilityConverter : IValueConverter
     {
         if (value is bool boolValue)
         {
-            bool invert = parameter?.ToString() == "invert";
+            var invert = parameter?.ToString() == "invert";
             return boolValue ^ invert ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -23,7 +23,7 @@ public class BooleanToVisibilityConverter : IValueConverter
     {
         if (value is Visibility visibility)
         {
-            bool invert = parameter?.ToString() == "invert";
+            var invert = parameter?.ToString() == "invert";
             return (visibility == Visibility.Visible) ^ invert;
         }
 

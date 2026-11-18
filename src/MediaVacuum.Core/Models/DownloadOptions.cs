@@ -1,50 +1,54 @@
 namespace MediaVacuum.Core.Models;
 
+public enum DownloadMode
+{
+    Video,
+    Audio
+}
+
 public class DownloadOptions
 {
-    public string Url { get; set; } = string.Empty;
+    public string OutputDirectory { get; set; } =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "MediaVacuum");
 
-    public string OutputDirectory { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + "\\Downloads\\MediaVacuum";
+    public DownloadMode Mode { get; set; } = DownloadMode.Video;
 
-    public string? Format { get; set; }
+    /// <summary>Preset key: best, 2160p, 1440p, 1080p, 720p, 480p, 360p or custom.</summary>
+    public string VideoPreset { get; set; } = "best";
 
-    public bool ExtractAudio { get; set; }
+    /// <summary>Advanced yt-dlp format selector. Takes precedence over the preset when set.</summary>
+    public string? CustomFormat { get; set; }
 
-    public string? AudioFormat { get; set; }
+    /// <summary>auto, mp4, mkv, webm, mp4-recode.</summary>
+    public string VideoContainer { get; set; } = "auto";
 
-    public bool EmbedMetadata { get; set; }
+    public string AudioFormat { get; set; } = "mp3";
 
-    public bool EmbedThumbnail { get; set; }
+    public bool EmbedMetadata { get; set; } = true;
+
+    public bool EmbedThumbnail { get; set; } = true;
+
+    /// <summary>Also keep a .jpg/.webp thumbnail next to the media file.</summary>
+    public bool WriteThumbnail { get; set; }
 
     public bool WriteSubtitles { get; set; }
 
-    public string? SubtitleLanguages { get; set; }
+    public bool EmbedSubtitles { get; set; }
 
-    public int? ConcurrentFragments { get; set; }
+    public string SubtitleLanguages { get; set; } = "en";
 
-    public string? LimitRate { get; set; }
+    public bool CreatePlaylistFolder { get; set; } = true;
 
-    public bool Playlist { get; set; }
+    /// <summary>Append [videoId] to the filename to avoid collisions.</summary>
+    public bool IncludeVideoId { get; set; }
 
-    public Dictionary<string, string> ToArguments()
-    {
-        var args = new Dictionary<string, string>
-        {
-            ["url"] = Url,
-            ["output"] = OutputDirectory
-        };
+    public int ConcurrentFragments { get; set; } = 1;
 
-        if (!string.IsNullOrEmpty(Format)) args["format"] = Format;
-        if (ExtractAudio) args["extract-audio"] = "";
-        if (!string.IsNullOrEmpty(AudioFormat)) args["audio-format"] = AudioFormat;
-        if (EmbedMetadata) args["embed-metadata"] = "";
-        if (EmbedThumbnail) args["embed-thumbnail"] = "";
-        if (WriteSubtitles) args["write-subs"] = "";
-        if (!string.IsNullOrEmpty(SubtitleLanguages)) args["sub-langs"] = SubtitleLanguages;
-        if (ConcurrentFragments.HasValue) args["concurrent-fragments"] = ConcurrentFragments.Value.ToString();
-        if (!string.IsNullOrEmpty(LimitRate)) args["limit-rate"] = LimitRate;
-        if (!Playlist) args["no-playlist"] = "";
+    /// <summary>Download speed limit in KiB/s. 0 means unlimited.</summary>
+    public int LimitRateKb { get; set; }
 
-        return args;
-    }
+    public bool OverwriteExisting { get; set; }
+
+    /// <summary>Directory containing ffmpeg.exe/ffprobe.exe, when available.</summary>
+    public string? FfmpegPath { get; set; }
 }

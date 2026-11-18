@@ -4,11 +4,11 @@ public class DownloadResult
 {
     public bool Success { get; set; }
 
+    public bool Cancelled { get; set; }
+
     public string? FilePath { get; set; }
 
     public string? Title { get; set; }
-
-    public TimeSpan? Duration { get; set; }
 
     public long? FileSize { get; set; }
 
@@ -22,10 +22,11 @@ public class DownloadResult
         ErrorMessage = error
     };
 
-    public static DownloadResult FromSuccess(string filePath, string title) => new()
+    public static DownloadResult FromSuccess(string? filePath, string? title, long? fileSize = null) => new()
     {
         Success = true,
         FilePath = filePath,
-        Title = title
+        Title = title,
+        FileSize = fileSize
     };
 }

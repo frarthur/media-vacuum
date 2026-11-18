@@ -23,6 +23,11 @@ Write-Host "RID     : $Rid"
 Write-Host ""
 
 if (-not $SkipBuild) {
+    Write-Host ">>> Cleaning output..." -ForegroundColor Yellow
+    if (Test-Path $OutputDir) {
+        Remove-Item -Recurse -Force $OutputDir
+    }
+
     Write-Host ">>> Restoring packages..." -ForegroundColor Yellow
     dotnet restore $RepoRoot
     if ($LASTEXITCODE -ne 0) { throw "Restore failed" }
@@ -32,6 +37,7 @@ if (-not $SkipBuild) {
         -c Release `
         --self-contained true `
         -r $Rid `
+        -p:Version=$Version `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=embedded `
@@ -44,16 +50,15 @@ $archiveName = "MediaVacuum-$Version-$Rid.zip"
 $archivePath = Join-Path $RepoRoot $archiveName
 Write-Host ">>> Creating archive: $archiveName ..." -ForegroundColor Yellow
 
-# Remove old archive if exists
 Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
 
-Compress-Archive -Path "$OutputDir\*" `
-    -DestinationPath $archivePath
+Compress-Archive -Path "$OutputDir\*" -DestinationPath $archivePath
 
 Write-Host ""
 Write-Host "=== Done ===" -ForegroundColor Green
-Write-Host "Archive  : $archivePath"
-Write-Host "Size     : $('{0:N2}' -f ((Get-Item $archivePath).Length / 1MB)) MB"
+Write-Host "Executable : $OutputDir\MediaVacuum.exe"
+Write-Host "Archive    : $archivePath"
+Write-Host "Size       : $('{0:N2}' -f ((Get-Item $archivePath).Length / 1MB)) MB"
 Write-Host ""
 Write-Host "To create a GitHub release:" -ForegroundColor Cyan
 Write-Host "  gh release create v$Version --title 'v$Version' --notes-file RELEASE_NOTES.md $archivePath"

@@ -1,11 +1,11 @@
 <Project>
   <PropertyGroup>
-    <Version>0.1.1</Version>
+    <Version>0.2.0</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <InformationalVersion>$(Version)</InformationalVersion>
     <Authors>MediaVacuum</Authors>
-    <Description>GUI wrapper for yt-dlp – download videos and audio from YouTube and hundreds of sites.</Description>
+    <Description>GUI wrapper for yt-dlp – download and convert video and audio from hundreds of sites.</Description>
     <Copyright>Copyright (c) 2026 MediaVacuum. yt-dlp is licensed under the Unlicense.</Copyright>
     <RepositoryUrl>https://github.com/frarthur/MediaVacuum</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

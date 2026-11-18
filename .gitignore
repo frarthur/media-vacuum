@@ -58,8 +58,14 @@ packages/
 **/[Rr]elease/
 **/[Dd]ebug/
 
+# ─── Tests ──────────────────────────────────────────────────────────
+TestResults/
+*.trx
+*.coverage
+coverage/
+*.coveragexml
+
 # ─── Project specific ───────────────────────────────────────────────────────────
 /inspi/
 yt-dlp/*.exe
-src/MediaVacuum/Translations/
 publish/

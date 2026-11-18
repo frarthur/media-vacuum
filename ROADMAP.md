@@ -1,96 +1,74 @@
-# MediaVacuum — Roadmap Projet
+# MediaVacuum — Roadmap
 
 ## Vision
-Application Windows professionnelle qui intègre **yt-dlp** dans l'explorateur Windows via le menu contextuel, avec une interface graphique WPF complète pour télécharger médias et vidéos depuis des centaines de sites.
+
+Application Windows native qui rend **yt-dlp** confortable : file de téléchargement visuelle, playlists et chaînes, miniatures, tailles, formats, thèmes clair/sombre et menu contextuel dans l'Explorateur.
 
 ---
 
-## Choix Techniques
+## État actuel — v0.2.0
 
-| Aspect | Choix | Justification |
-|--------|-------|---------------|
-| **Langage** | C# 12 / .NET 8 | Windows natif, WPF pour GUI riche, .exe standalone, écosystème mature |
-| **Framework GUI** | WPF (MVVM) | Standard professionnel Windows, data binding, maintenable |
-| **Architecture** | Clean Architecture / MVVM | 3 projets : Core (logique), WPF (UI), Installer (déploiement) |
-| **Build** | dotnet publish / MSBuild | Single-file .exe ou MSI |
-| **Docker** | Non applicable | Application GUI Windows native, pas de conteneurisation pertinente |
-| **Backend** | yt-dlp.exe | Moteur de téléchargement éprouvé (crédité) |
+### Fondations
+- [x] Solution .NET 9 / WPF / MVVM en 3 projets (UI, Core, Installer)
+- [x] Core sans dépendance WPF
+- [x] Configuration persistante versionnée
+- [x] Journalisation locale et gestionnaire d'exceptions
+- [x] Tests unitaires (modèles, parsing, traductions, file)
 
----
+### Téléchargement
+- [x] Analyse d'une URL avant téléchargement
+- [x] File de téléchargement avec sélection, suppression et annulation
+- [x] Playlists et chaînes : une ligne par vidéo
+- [x] Miniatures, durées et tailles estimées
+- [x] Progression par élément (pourcentage, vitesse, temps restant)
+- [x] Progression globale et taille totale de la sélection
+- [x] Téléchargements simultanés configurables
+- [x] Noms de fichiers propres et dossiers par playlist
+- [x] Formats vidéo valides (`bv*[height<=…]+ba/b[…]`)
+- [x] Conteneurs MP4/MKV/WebM et réencodage optionnel
+- [x] Extraction audio (MP3, M4A, AAC, FLAC, Opus, Vorbis, WAV, ALAC)
+- [x] Sélecteur de format avancé
+- [x] Métadonnées, miniatures et sous-titres
 
-## Structure du Projet
+### Outils
+- [x] Détection de ffmpeg et téléchargement guidé
+- [x] Vérification des mises à jour yt-dlp via l'API GitHub
+- [x] Vérification SHA-256 lorsqu'elle est disponible
+- [x] Mise à jour automatique de MediaVacuum (téléchargement, remplacement de l'exe, relance)
+- [x] Menu contextuel HKCU (dossier et arrière-plan de dossier)
+- [x] Thèmes Système / Clair / Sombre
+- [x] 5 langues complètes
+- [x] Désinstallation sûre (jamais les téléchargements)
 
-```
-MediaVacuum/
-├── src/
-│   ├── MediaVacuum/               # Application WPF (UI + ViewModels)
-│   │   ├── App.xaml / App.xaml.cs
-│   │   ├── MainWindow.xaml / .cs
-│   │   ├── ViewModels/
-│   │   │   └── MainViewModel.cs
-│   │   ├── Views/
-│   │   │   ├── DownloadView.xaml / .cs
-│   │   │   └── SettingsView.xaml / .cs
-│   │   └── Converters/
-│   ├── MediaVacuum.Core/          # Logique métier (sans UI)
-│   │   ├── Models/
-│   │   │   └── DownloadOptions.cs
-│   │   ├── Services/
-│   │   │   ├── YtDlpService.cs        # Wrapper yt-dlp
-│   │   │   ├── UpdateService.cs       # Auto-update yt-dlp
-│   │   │   └── ContextMenuService.cs  # Gestion menu contextuel
-│   │   └── Interfaces/
-│   │       └── IYtDlpService.cs
-│   └── MediaVacuum.Installer/     # Install/Désinstall (CLI ou wrapper)
-│       └── Installer.cs
-├── tests/
-│   └── MediaVacuum.Tests/
-├── docs/
-├── inspi/                         # Fichiers d'inspiration originaux
-├── yt-dlp/                        # Binaires yt-dlp (téléchargés)
-└── .gitmessage                    # Template de commit
-```
+### Distribution
+- [x] Publication single-file win-x64
+- [x] Licence MIT
+- [x] Documentation utilisateur
+- [x] Workflow CI GitHub Actions
 
 ---
 
-## Phases
+## Prochaines étapes possibles
 
-### Phase 1 — Fondations
-- [x] Initialiser le dépôt git
-- [x] Créer la solution .NET avec les 3 projets
-- [x] Configurer .gitignore, .gitmessage
-- [x] Écrire le ROADMAP.md finalisé
+### v0.3
+- [ ] Historique persistant des téléchargements
+- [ ] Reprise d'une file après redémarrage
+- [ ] Cookies / authentification (navigateur ou fichier)
+- [ ] Sous-titres : téléchargement séparé ou incrustation au choix par langue
+- [ ] Aperçu du média (titre, chaîne, miniature, formats disponibles)
+- [ ] Vitesse limite par élément
 
-### Phase 2 — Core (logique métier)
-- [ ] `YtDlpService` — exécution de yt-dlp avec arguments, parsing JSON, streaming stdout
-- [ ] `UpdateService` — téléchargement de la dernière version de yt-dlp.exe
-- [ ] `ContextMenuService` — ajout/suppression du menu contextuel (registry)
-- [ ] `DownloadOptions` — modèle des options de téléchargement
-
-### Phase 3 — Interface WPF (MVVM)
-- [ ] `MainWindow` — layout principal (URL, options, logs, progression)
-- [ ] `DownloadView` — contrôle de téléchargement simple (URL + preset)
-- [ ] `SettingsView` — configuration (dossier sortie, format, ffmpeg, etc.)
-- [ ] `MainViewModel` — binding des données, commandes asynchrones
-- [ ] Thème visuel propre, icônes, branding
-
-### Phase 4 — Installateur & Déploiement
-- [ ] Installation : copie des fichiers + inscription menu contextuel
-- [ ] Désinstallation : nettoyage complet (fichiers + registry)
-- [ ] Auto-update : mise à jour de yt-dlp.exe via `UpdateService`
-- [ ] Single-file publish (.exe autonome)
-
-### Phase 5 — Finitions
-- [ ] Tests unitaires (Core)
-- [ ] Documentation utilisateur
-- [ ] Licence (MIT)
-- [ ] Publication GitHub
+### v0.4
+- [ ] File de plusieurs URLs (coller plusieurs liens d'un coup)
+- [ ] Modèles de noms personnalisables
+- [ ] Presets de téléchargement (vidéo, audio, archive)
+- [ ] SponsorBlock et chapitres
 
 ---
 
-## Règles de Commit
+## Règles de commit
 
-Suivre le format défini dans `.gitmessage` :
+Format défini dans `.gitmessage` :
 
 ```
 <type>(<scope>): <sujet>
@@ -98,32 +76,22 @@ Suivre le format défini dans `.gitmessage` :
 
 Types : `feat` | `fix` | `refactor` | `style` | `test` | `docs` | `chore` | `perf`
 
-Exemples :
-- `feat(core): add yt-dlp process wrapper`
-- `feat(ui): implement download view with presets`
-- `fix(installer): handle spaces in install path`
-- `docs(roadmap): update project phases`
-
 ---
 
-## Release Workflow
-
-Chaque version stable est taguée (`v0.1.0`, `v0.2.0`, etc.) et distribuée via **GitHub Releases**.
+## Workflow de release
 
 ```powershell
-# 1. Build single-file .exe
+# 1. Mettre à jour la version dans Directory.Build.props
+# 2. Construire l'exécutable et l'archive
 .\publish.ps1
 
-# 2. Créer la release GitHub (nécessite gh CLI)
-gh release create v0.1.0 --title "v0.1.0" --notes "Release notes..." ./publish/MediaVacuum.exe
+# 3. Créer la release GitHub
+gh release create v0.2.0 --title "v0.2.0" --notes-file RELEASE_NOTES.md .\MediaVacuum-0.2.0-win-x64.zip
 ```
-
-`publish.ps1` produit un `.exe` self-contained dans `./publish/` et une archive `.zip` à la racine.
-
-L'application peut vérifier sa version via l'API GitHub Releases (`/repos/frarthur/MediaVacuum/releases/latest`) pour implémenter l'auto-update.
 
 ---
 
 ## Crédits
 
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — le moteur de téléchargement sous-jacent
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — moteur de téléchargement
+- [FFmpeg](https://ffmpeg.org/) — conversion et post-traitement
